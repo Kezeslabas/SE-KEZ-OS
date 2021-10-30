@@ -33,6 +33,7 @@ namespace IngameScript
 
         }
 
+        //Development started
         public void Main(string argument, UpdateType updateSource)
         {
             Class1 class1 = new Class1();
