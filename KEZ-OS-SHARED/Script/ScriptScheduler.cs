@@ -27,7 +27,8 @@ namespace IngameScript
         /// </summary>
         public enum ScriptType : byte
         {
-            DEBUG
+            DEBUG,
+            DEBUG2
         }
 
         /// <summary>
@@ -61,6 +62,7 @@ namespace IngameScript
                 switch (name)
                 {
                     case "DEBUG": return scripts[ScriptType.DEBUG];
+                    case "DEBUG2": return scripts[ScriptType.DEBUG2];
                     default: return null;
                 }
             }

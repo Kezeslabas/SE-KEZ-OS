@@ -24,12 +24,17 @@ namespace IngameScript
     {
         readonly ScriptScheduler SCRIPT_SCHEDULER;
         readonly SchedulableScript debugScript;
+        readonly SchedulableScript debugScript2;
+
+        bool mark = true;
         public Program()
         {
             SCRIPT_SCHEDULER = new ScriptScheduler();
             debugScript = new DebugScript();
+            debugScript2 = new DebugScript2();
 
             SCRIPT_SCHEDULER.RegisterScript(debugScript);
+            SCRIPT_SCHEDULER.RegisterScript(debugScript2);
         }
 
         public void Save()
@@ -40,11 +45,20 @@ namespace IngameScript
         //Development started
         public void Main(string argument, UpdateType updateSource)
         {
+            Echo((mark ? "#" : "") + " Running...");
+            mark = !mark;
             SCRIPT_SCHEDULER.ContinueAll(updateSource);
 
-            SCRIPT_SCHEDULER.DecodeArgument(argument).Run();
+            var script = SCRIPT_SCHEDULER.DecodeArgument(argument);
+            if (script != null)
+            {
+                Echo("Script: " + script.ScriptType.ToString());
+                script.Run();
+            }
+            else Echo("Script not found!");
 
             SCRIPT_SCHEDULER.ScheduleAll(SetUpdateFrequency);
+            Echo("Schedule: " + Runtime.UpdateFrequency.ToString());
         }
 
         public void SetUpdateFrequency(UpdateFrequency frequency)

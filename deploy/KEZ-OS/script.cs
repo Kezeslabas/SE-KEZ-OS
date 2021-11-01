@@ -4,12 +4,17 @@
 
 readonly ScriptScheduler SCRIPT_SCHEDULER;
 readonly SchedulableScript debugScript;
+readonly SchedulableScript debugScript2;
+
+bool mark = true;
 public Program()
 {
     SCRIPT_SCHEDULER = new ScriptScheduler();
     debugScript = new DebugScript();
+    debugScript2 = new DebugScript2();
 
     SCRIPT_SCHEDULER.RegisterScript(debugScript);
+    SCRIPT_SCHEDULER.RegisterScript(debugScript2);
 }
 
 public void Save()
@@ -19,11 +24,20 @@ public void Save()
 
 public void Main(string argument, UpdateType updateSource)
 {
+    Echo((mark ? "#" : "") + " Running...");
+    mark = !mark;
     SCRIPT_SCHEDULER.ContinueAll(updateSource);
 
-    SCRIPT_SCHEDULER.DecodeArgument(argument).Run();
+    var script = SCRIPT_SCHEDULER.DecodeArgument(argument);
+    if (script != null)
+    {
+        Echo("Script: " + script.ScriptType.ToString());
+        script.Run();
+    }
+    else Echo("Script not found!");
 
     SCRIPT_SCHEDULER.ScheduleAll(SetUpdateFrequency);
+    Echo("Schedule: " + Runtime.UpdateFrequency.ToString());
 }
 
 public void SetUpdateFrequency(UpdateFrequency frequency)
@@ -48,6 +62,27 @@ public class DebugScript : SchedulableScript
     protected override void DoContinue()
     {
         if (counter > 2) DeActivate();
+        else counter++;
+    }
+}
+
+public class DebugScript2 : SchedulableScript
+{
+    private byte counter = 0;
+    public DebugScript2() : base(ScriptType.DEBUG2)
+    {
+
+    }
+
+    public override void Run()
+    {
+        Activate(UpdateFrequency.Update10);
+        counter = 0;
+    }
+
+    protected override void DoContinue()
+    {
+        if (counter > 30) DeActivate();
         else counter++;
     }
 }
@@ -93,7 +128,8 @@ public UpdateFrequency GetSchedule()
 
 public enum ScriptType : byte
 {
-    DEBUG
+    DEBUG,
+    DEBUG2
 }
 
 public class ScriptScheduler
@@ -116,6 +152,7 @@ public SchedulableScript FindScriptByName(string name)
         switch (name)
         {
             case "DEBUG": return scripts[ScriptType.DEBUG];
+            case "DEBUG2": return scripts[ScriptType.DEBUG2];
             default: return null;
         }
     }
