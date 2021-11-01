@@ -22,10 +22,19 @@ namespace IngameScript
 {
     partial class Program : MyGridProgram
     {
+        readonly ScriptScheduler SCRIPT_SCHEDULER;
+        readonly SchedulableScript debugScript;
+        readonly SchedulableScript debugScript2;
 
+        bool mark = true;
         public Program()
         {
-            
+            SCRIPT_SCHEDULER = new ScriptScheduler();
+            debugScript = new DebugScript();
+            debugScript2 = new DebugScript2();
+
+            SCRIPT_SCHEDULER.RegisterScript(debugScript);
+            SCRIPT_SCHEDULER.RegisterScript(debugScript2);
         }
 
         public void Save()
@@ -36,8 +45,26 @@ namespace IngameScript
         //Development started
         public void Main(string argument, UpdateType updateSource)
         {
-            Class1 class1 = new Class1();
-            Echo(class1.qweasd(true));
+            Echo((mark ? "#" : "") + " Running...");
+            mark = !mark;
+            SCRIPT_SCHEDULER.ContinueAll(updateSource);
+
+            var script = SCRIPT_SCHEDULER.DecodeArgument(argument);
+            if (script != null)
+            {
+                Echo("Script: " + script.ScriptType.ToString());
+                script.Run();
+            }
+            else Echo("Script not found!");
+
+            SCRIPT_SCHEDULER.ScheduleAll(SetUpdateFrequency);
+            Echo("Schedule: " + Runtime.UpdateFrequency.ToString());
         }
+
+        public void SetUpdateFrequency(UpdateFrequency frequency)
+        {
+            Runtime.UpdateFrequency = frequency;
+        }
+
     }
 }

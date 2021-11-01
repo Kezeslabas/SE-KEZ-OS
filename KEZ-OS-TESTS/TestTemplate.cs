@@ -1,8 +1,10 @@
-﻿using Sandbox.Game.EntityComponents;
+﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
+using System;
+using static IngameScript.Program;
+using Sandbox.Game.EntityComponents;
 using Sandbox.ModAPI.Ingame;
 using Sandbox.ModAPI.Interfaces;
 using SpaceEngineers.Game.ModAPI.Ingame;
-using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -17,17 +19,18 @@ using VRage.Game.ModAPI.Ingame;
 using VRage.Game.ModAPI.Ingame.Utilities;
 using VRage.Game.ObjectBuilders.Definitions;
 using VRageMath;
+using Moq;
 
-namespace IngameScript
+namespace KEZ_OS_TESTS
 {
-    partial class Program
+    [TestClass]
+    public class TestTemplate
     {
-        public class Class1
+
+        [TestMethod]
+        public void TestMethodTemplate()
         {
-            public string qweasd(bool qwe)
-            {
-                return qwe ? "qwe" : "asd";
-            }
+            
         }
     }
 }
