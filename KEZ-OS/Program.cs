@@ -22,19 +22,34 @@ namespace IngameScript
 {
     partial class Program : MyGridProgram
     {
-        readonly ScriptScheduler SCRIPT_SCHEDULER;
-        readonly SchedulableScript debugScript;
-        readonly SchedulableScript debugScript2;
+        // Base
+        private readonly TerminalLogger logger;
+        private MyCommandLine commandLine;
+        private readonly BlockProvider blockProvider;
 
-        bool mark = true;
+        // Scripts
+        private readonly NamesScript namesScript;
+
+        // Handlers & Services
+        private readonly ScriptRouter scriptRouter;
+        private readonly ContinuousServiceHandler continuousServiceHandler;
+
         public Program()
         {
-            SCRIPT_SCHEDULER = new ScriptScheduler();
-            debugScript = new DebugScript();
-            debugScript2 = new DebugScript2();
+            // Base
+            logger = new TerminalLogger(Echo);
+            commandLine = new MyCommandLine();
+            blockProvider = new BlockProvider(GridTerminalSystem.GetBlocks);
 
-            SCRIPT_SCHEDULER.RegisterScript(debugScript);
-            SCRIPT_SCHEDULER.RegisterScript(debugScript2);
+            // Scripts
+            namesScript = new NamesScript(logger, blockProvider, Me);
+
+            // Handlers & Services
+            scriptRouter = new ScriptRouter(logger);
+            scriptRouter.RegisterScript(namesScript);
+
+            continuousServiceHandler = new ContinuousServiceHandler(1);
+            continuousServiceHandler.RegisterService(blockProvider);
         }
 
         public void Save()
@@ -45,26 +60,16 @@ namespace IngameScript
         //Development started
         public void Main(string argument, UpdateType updateSource)
         {
-            Echo((mark ? "#" : "") + " Running...");
-            mark = !mark;
-            SCRIPT_SCHEDULER.ContinueAll(updateSource);
+            continuousServiceHandler.Continue();
 
-            var script = SCRIPT_SCHEDULER.DecodeArgument(argument);
-            if (script != null)
-            {
-                Echo("Script: " + script.ScriptType.ToString());
-                script.Run();
+            if (commandLine.TryParse(argument))
+            {    
+                scriptRouter.Route(ref commandLine);
             }
-            else Echo("Script not found!");
 
-            SCRIPT_SCHEDULER.ScheduleAll(SetUpdateFrequency);
-            Echo("Schedule: " + Runtime.UpdateFrequency.ToString());
+            
         }
 
-        public void SetUpdateFrequency(UpdateFrequency frequency)
-        {
-            Runtime.UpdateFrequency = frequency;
-        }
-
+        
     }
 }

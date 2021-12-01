@@ -9,8 +9,11 @@
     <Import_RootNamespace>IngameScript</Import_RootNamespace>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="$(MSBuildThisFileDirectory)Script\SchedulableScript.cs" />
-    <Compile Include="$(MSBuildThisFileDirectory)Script\Debug\DebugScript.cs" />
-    <Compile Include="$(MSBuildThisFileDirectory)Script\ScriptScheduler.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)BlockProvider.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ContinuousServiceHandler.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ScriptRouter.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Scripts\NamesScript.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Scripts\Script.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)TerminalLogger.cs" />
   </ItemGroup>
 </Project>

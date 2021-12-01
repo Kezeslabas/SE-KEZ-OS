@@ -2,19 +2,28 @@
  * KEZ-OS v0.01
  */
 
-readonly ScriptScheduler SCRIPT_SCHEDULER;
-readonly SchedulableScript debugScript;
-readonly SchedulableScript debugScript2;
+private readonly TerminalLogger logger;
+private MyCommandLine commandLine;
+private readonly BlockProvider blockProvider;
 
-bool mark = true;
+private readonly NamesScript namesScript;
+
+private readonly ScriptRouter scriptRouter;
+private readonly ContinuousServiceHandler continuousServiceHandler;
+
 public Program()
 {
-    SCRIPT_SCHEDULER = new ScriptScheduler();
-    debugScript = new DebugScript();
-    debugScript2 = new DebugScript2();
+    logger = new TerminalLogger(Echo);
+    commandLine = new MyCommandLine();
+    blockProvider = new BlockProvider(GridTerminalSystem.GetBlocks);
 
-    SCRIPT_SCHEDULER.RegisterScript(debugScript);
-    SCRIPT_SCHEDULER.RegisterScript(debugScript2);
+    namesScript = new NamesScript(logger, blockProvider, Me);
+
+    scriptRouter = new ScriptRouter(logger);
+    scriptRouter.RegisterScript(namesScript);
+
+    continuousServiceHandler = new ContinuousServiceHandler(1);
+    continuousServiceHandler.RegisterService(blockProvider);
 }
 
 public void Save()
@@ -24,199 +33,324 @@ public void Save()
 
 public void Main(string argument, UpdateType updateSource)
 {
-    Echo((mark ? "#" : "") + " Running...");
-    mark = !mark;
-    SCRIPT_SCHEDULER.ContinueAll(updateSource);
+    continuousServiceHandler.Continue();
 
-    var script = SCRIPT_SCHEDULER.DecodeArgument(argument);
-    if (script != null)
+    if (commandLine.TryParse(argument))
     {
-        Echo("Script: " + script.ScriptType.ToString());
-        script.Run();
+        scriptRouter.Route(ref commandLine);
     }
-    else Echo("Script not found!");
 
-    SCRIPT_SCHEDULER.ScheduleAll(SetUpdateFrequency);
-    Echo("Schedule: " + Runtime.UpdateFrequency.ToString());
+
 }
 
-public void SetUpdateFrequency(UpdateFrequency frequency)
+public class BlockProvider : IContinuousService
 {
-    Runtime.UpdateFrequency = frequency;
-}
+    private readonly Action<List<IMyTerminalBlock>> getBlocks;
+    private List<IMyTerminalBlock> blocks = new List<IMyTerminalBlock>();
 
-public class DebugScript : SchedulableScript
-{
-    private byte counter = 0;
-    public DebugScript() : base(ScriptType.DEBUG)
+    private bool blocksWereSearched = false;
+
+    public BlockProvider(Action<List<IMyTerminalBlock>> getBlocks)
     {
-
+        this.getBlocks = getBlocks;
     }
 
-    public override void Run()
+    public void Continue()
     {
-        Activate(UpdateFrequency.Update100);
-        counter = 0;
+        blocksWereSearched = false;
     }
 
-    protected override void DoContinue()
+    public List<IMyTerminalBlock> GetBlocks()
     {
-        if (counter > 2) DeActivate();
-        else counter++;
-    }
-}
-
-public class DebugScript2 : SchedulableScript
-{
-    private byte counter = 0;
-    public DebugScript2() : base(ScriptType.DEBUG2)
-    {
-
-    }
-
-    public override void Run()
-    {
-        Activate(UpdateFrequency.Update10);
-        counter = 0;
-    }
-
-    protected override void DoContinue()
-    {
-        if (counter > 30) DeActivate();
-        else counter++;
-    }
-}
-
-public abstract class SchedulableScript
-{
-    public ScriptType ScriptType { get; }
-
-    private bool ImActive;
-    private UpdateFrequency nextFrequency = UpdateFrequency.None;
-
-    protected SchedulableScript(ScriptType scriptType)
-    {
-        ScriptType = scriptType;
-    }
-
-public void Continue()
-    {
-        if (ImActive) DoContinue();
-    }
-
-protected abstract void DoContinue();
-
-protected void Activate(UpdateFrequency frequency)
-    {
-        nextFrequency = frequency;
-        ImActive = true;
-    }
-
-protected void DeActivate()
-    {
-        nextFrequency = UpdateFrequency.None;
-        ImActive = false;
-    }
-
-public abstract void Run();
-
-public UpdateFrequency GetSchedule()
-    {
-        return nextFrequency;
-    }
-}
-
-public enum ScriptType : byte
-{
-    DEBUG,
-    DEBUG2
-}
-
-public class ScriptScheduler
-{
-    private readonly FrequencySchedule frequencySchedule = new FrequencySchedule();
-    private readonly Dictionary<ScriptType, SchedulableScript> scripts = new Dictionary<ScriptType, SchedulableScript>();
-
-public void RegisterScript(SchedulableScript script)
-    {
-        scripts.Add(script.ScriptType, script);
-    }
-
-public Dictionary<ScriptType, SchedulableScript> GetAllScripts()
-    {
-        return scripts;
-    }
-
-public SchedulableScript FindScriptByName(string name)
-    {
-        switch (name)
+        if (!blocksWereSearched)
         {
-            case "DEBUG": return scripts[ScriptType.DEBUG];
-            case "DEBUG2": return scripts[ScriptType.DEBUG2];
-            default: return null;
-        }
-    }
-
-public void ContinueAll(UpdateType updateType)
-    {
-        if((updateType & (UpdateType.Update1 | UpdateType.Update10 | UpdateType.Update100)) != 0)
-        {
-            foreach (var script in scripts.Values)
-            {
-                script.Continue();
-            }
-        }
-    }
-
-public SchedulableScript DecodeArgument(string argument)
-    {
-        return FindScriptByName(argument);
-    }
-
-public void ScheduleAll(Action<UpdateFrequency> schedulerAction)
-    {
-        frequencySchedule.Reset();
-
-        foreach (var script in scripts.Values)
-        {
-            frequencySchedule.Evaulate(script.GetSchedule());
+            getBlocks.Invoke(blocks);
         }
 
-        schedulerAction.Invoke(frequencySchedule.CalculateScheduleFrequency());
+        return blocks;
     }
-
 }
 
-public class FrequencySchedule
+public interface IContinuousService
 {
-    private UpdateFrequency schdeuleFrequency;
+    void Continue();
+}
 
-    public bool schedule100 = false;
-    public bool schedule10 = false;
-    public bool schedule1 = false;
+public class ContinuousServiceHandler
+{
+    private readonly IContinuousService[] services;
+    private byte index = 0;
 
-public void Reset()
+    public ContinuousServiceHandler(byte maxServices)
     {
-        schedule100 = false;
-        schedule10 = false;
-        schedule1 = false;
+        services = new IContinuousService[maxServices];
     }
 
-public void Evaulate(UpdateFrequency frequency)
+    public void RegisterService(IContinuousService service)
     {
-        schedule100 = frequency == UpdateFrequency.Update100 || schedule100;
-        schedule10 = frequency == UpdateFrequency.Update10 || schedule10;
-        schedule1 = frequency == UpdateFrequency.Update1 || schedule1;
+        if(index >= services.Length)
+        {
+            return;
+        }
+
+        services[index] = service;
+        index++;
     }
 
-public UpdateFrequency CalculateScheduleFrequency()
+    public void Continue()
     {
-        schdeuleFrequency = UpdateFrequency.None;
+        for (int i = 0; i < services.Length; i++)
+        {
+            services[i].Continue();
+        }
+    }
+}
 
-        schdeuleFrequency = schedule100 ? schdeuleFrequency | UpdateFrequency.Update100 : schdeuleFrequency;
-        schdeuleFrequency = schedule10 ? schdeuleFrequency | UpdateFrequency.Update10 : schdeuleFrequency;
-        schdeuleFrequency = schedule1 ? schdeuleFrequency | UpdateFrequency.Update1 : schdeuleFrequency;
+public class NamesScript : Script
+{
+    private const string scriptName = "name";
 
-        return schdeuleFrequency;
+    private const string switchForAllConnectedGrids = "all";
+    private const string switchForAddAsPrefix = "prefix";
+
+    private readonly Dictionary<string, Action> commands;
+    private readonly BlockProvider blockProvider;
+    private readonly IMyTerminalBlock myBlock;
+
+    public NamesScript(TerminalLogger logger, BlockProvider blockProvider, IMyTerminalBlock myBlock) : base(logger)
+    {
+        this.blockProvider = blockProvider;
+        this.myBlock = myBlock;
+
+        commands = new Dictionary<string, Action>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["replace"] = Replace,
+            ["replace-filtered"] = ReplaceFiltered,
+            ["add"] = Add,
+            ["add-filtered"] = AddFiltered,
+        };
+    }
+
+    public override string ScriptName()
+    {
+        return scriptName;
+    }
+
+    protected override Dictionary<string, Action> Commands()
+    {
+        return commands;
+    }
+
+public void Add()
+    {
+        switch (commandLine.ArgumentCount)
+        {
+            case 2:
+                logger.Debug("Missing Parameter 3!");
+                break;
+            default:
+                break;
+        }
+
+        string text = commandLine.Argument(2);
+        var blocks = blockProvider.GetBlocks();
+
+        if (commandLine.Switch(switchForAddAsPrefix))
+        {
+            logger.Debug("Switch '" + switchForAddAsPrefix + "' found!");
+            blocks.ForEach(block => block.CustomName = text + block.CustomName);
+            return;
+        }
+
+        blocks.ForEach(block => block.CustomName += text);
+    }
+
+public void AddFiltered()
+    {
+        switch (commandLine.ArgumentCount)
+        {
+            case 2:
+                logger.Debug("Missing Parameter 3 and 4!");
+                break;
+            case 3:
+                logger.Debug("Missing Parameter 4!");
+                break;
+            default:
+                break;
+        }
+
+        string filter = commandLine.Argument(2);
+        string text = commandLine.Argument(3);
+        var blocks = blockProvider.GetBlocks();
+
+        if (commandLine.Switch(switchForAddAsPrefix))
+        {
+            logger.Debug("Switch '" + switchForAddAsPrefix + "' found!");
+            blocks.ForEach(block => {
+                if (block.CustomName.Contains(filter)) block.CustomName = text + block.CustomName;
+            });
+            return;
+        }
+
+        blocks.ForEach(block => {
+            if (block.CustomName.Contains(filter)) block.CustomName += text;
+        });
+    }
+
+public void Replace()
+    {
+        switch (commandLine.ArgumentCount)
+        {
+            case 2:
+                logger.Debug("Missing Parameter 3 and 4!");
+                break;
+            case 3:
+                logger.Debug("Missing Parameter 4!");
+                break;
+            default:
+                break;
+        }
+
+        string original = commandLine.Argument(2);
+        string replace = commandLine.Argument(3);
+
+        var blocks = blockProvider.GetBlocks();
+
+        if (!commandLine.Switch(switchForAllConnectedGrids))
+        {
+            blocks.ForEach(block => {
+                if(block.IsSameConstructAs(myBlock)) ReplaceInBlock(block, original, replace);
+            });
+            return;
+        }
+
+        logger.Debug("Switch '" + switchForAllConnectedGrids + "' found!");
+        blockProvider.GetBlocks().ForEach(block => {
+            ReplaceInBlock(block, original, replace);
+        });
+    }
+
+public void ReplaceFiltered()
+    {
+        switch (commandLine.ArgumentCount)
+        {
+            case 2:
+                logger.Debug("Missing Parameter 3 and 4 and 5!");
+                break;
+            case 3:
+                logger.Debug("Missing Parameter 4 and 5!");
+                break;
+            case 4:
+                logger.Debug("Missing Parameter 5!");
+                break;
+            default:
+                break;
+        }
+
+        string filter = commandLine.Argument(2);
+        string original = commandLine.Argument(3);
+        string replace = commandLine.Argument(4);
+
+        var blocks = blockProvider.GetBlocks();
+
+        if (!commandLine.Switch(switchForAllConnectedGrids))
+        {
+            blocks.ForEach(block => {
+                if (block.IsSameConstructAs(myBlock) && block.CustomName.Contains(filter))
+                {
+                    ReplaceInBlock(block, original, replace);
+                }
+            });
+            return;
+        }
+
+        logger.Debug("Switch '" + switchForAllConnectedGrids + "' found!");
+        blockProvider.GetBlocks().ForEach(block => {
+            if (block.CustomName.Contains(filter)) ReplaceInBlock(block, original, replace);
+        });
+    }
+
+    private void ReplaceInBlock(IMyTerminalBlock block, string original, string replace)
+    {
+        block.CustomName = block.CustomName.Replace(original, replace);
+    }
+}
+
+public abstract class Script
+{
+    protected MyCommandLine commandLine;
+    protected readonly TerminalLogger logger;
+    private Action action;
+
+    public Script(TerminalLogger logger)
+    {
+        this.logger = logger;
+    }
+
+    public abstract string ScriptName();
+
+    protected abstract Dictionary<string, Action> Commands();
+
+    public void Run(ref MyCommandLine commandLine) {
+        this.commandLine = commandLine;
+        Dictionary<string, Action> commands = Commands();
+
+        logger.Debug("Script: " + commandLine.Argument(0) + " !");
+
+        string command = commandLine.Argument(1);
+
+        if(!commands.TryGetValue(command, out action))
+        {
+            logger.Debug("Command: " + command + " not found !");
+            return;
+        }
+
+        logger.Debug("Command: " + command + " !");
+        action.Invoke();
+    }
+}
+
+public class ScriptRouter
+{
+    private readonly Dictionary<string, Script> scripts = new Dictionary<string, Script>();
+    private Script script;
+
+    private readonly TerminalLogger logger;
+
+    public ScriptRouter(TerminalLogger logger)
+    {
+        this.logger = logger;
+    }
+
+    public void Route(ref MyCommandLine commandLine)
+    {
+        string scriptName = commandLine.Argument(0);
+        if (!scripts.TryGetValue(scriptName, out script))
+        {
+            logger.Debug("'" + scriptName + "' Not found!");
+            return;
+
+        }
+
+        script.Run(ref commandLine);
+    }
+
+    public void RegisterScript(Script script)
+    {
+        scripts[script.ScriptName()] = script;
+    }
+}
+
+public class TerminalLogger
+{
+    private readonly Action<string> echo;
+    public TerminalLogger(Action<string> echo)
+    {
+        this.echo = echo;
+    }
+
+    public void Debug(string msg)
+    {
+        echo.Invoke(msg);
     }
 }
